@@ -8,8 +8,6 @@ trap 'adb logcat -d -t 1200 | grep -iE "transcribe|documentsui|fourier|fatal|oom
 adb install app/build/outputs/apk/fdroid/debug/*.apk
 adb shell getprop ro.product.cpu.abi
 adb shell getprop ro.build.version.sdk
-adb shell wm size 1080x2400
-adb shell wm density 320
 adb shell input keyevent 82
 adb shell "run-as $app sh -c '[ ! -e files/models/$model ] && [ ! -s files/active_model ]'"
 adb shell df -h /data

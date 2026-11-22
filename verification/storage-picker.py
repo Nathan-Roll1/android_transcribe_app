@@ -23,7 +23,16 @@ def read_screen():
         try:
             adb("shell", "uiautomator", "dump", "/data/local/tmp/picker-ui.xml")
             data = adb("exec-out", "cat", "/data/local/tmp/picker-ui.xml")
-            return ET.fromstring(data)
+            root = ET.fromstring(data)
+            title = root.find(".//node[@resource-id='android:id/alertTitle']")
+            if title is not None and title.get("text", "").startswith("Pixel Launcher isn't responding"):
+                close = root.find(".//node[@resource-id='android:id/aerr_close']")
+                if close is None:
+                    raise RuntimeError("Pixel Launcher dialog has no close action")
+                snapshot("launcher-anr", root)
+                tap(close)
+                continue
+            return root
         except (ET.ParseError, subprocess.SubprocessError):
             time.sleep(1)
     raise RuntimeError("Could not read Android UI hierarchy")
@@ -58,13 +67,14 @@ def tap(node):
     adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2))
     time.sleep(0.55)
 
-def wait_for(candidates, seconds=25, allow_scroll=False):
-    deadline = time.monotonic()+seconds
+def wait_for(candidates, seconds=30, allow_scroll=False):
+    start = time.monotonic()
+    deadline = start+seconds
     while time.monotonic()<deadline:
         root = read_screen()
         n = locate(root, candidates)
         if n is not None: return root,n
-        if allow_scroll: adb("shell","input","swipe","500","1750","500","730","280")
+        if allow_scroll and time.monotonic()-start>6: adb("shell","input","swipe","500","1750","500","730","280")
     snapshot("failed-lookup",root)
     raise RuntimeError("Missing "+str(candidates))
 
@@ -72,6 +82,10 @@ def in_files(root):
     return any("documentsui" in n.get("package","") for n in root.iter("node"))
 
 def select_file():
+    root = read_screen()
+    snapshot("00-launch",root)
+    if not any(n.get("package")==APP for n in root.iter("node")):
+        adb("shell","am","start","-W","-n",APP+"/.MainActivity")
     root, n = wait_for([{"rid":"btn_voice_add_model"},{"rid":"btn_models"}],allow_scroll=True)
     snapshot("01-no-model",root)
     tap(n)

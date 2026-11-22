@@ -22,6 +22,12 @@ jobs:
           cargo install --locked cargo-ndk --version 4.1.2
           ./gradlew --no-daemon --max-workers=3 -PtargetAbis=x86_64 assembleFdroidDebug
           sha256sum app/build/outputs/apk/fdroid/debug/*.apk
+      - name: Preserve the unmodified app for this emulator ABI
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: x86_64-fdroid-debug-verification-apk
+          path: app/build/outputs/apk/fdroid/debug/*.apk
+          retention-days: 7
       - name: Fetch public model and recording on the ephemeral runner
         shell: bash
         run: |
