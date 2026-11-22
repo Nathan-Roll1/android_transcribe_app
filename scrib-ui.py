@@ -160,6 +160,12 @@ def main():
         seen=set()
         while time.monotonic()-start<300:
             r=read(); txt=labels(r)
+            # A fresh Android 15 install asks for permission when Scrib starts its
+            # notification-backed transcription. Accept it on this disposable AVD.
+            if any('allow scrib to send you notifications' in t.lower() for t in txt):
+                save(name+'-notification-prompt',r)
+                click(await_item('Allow'))
+                continue
             change=' | '.join(txt)[:900]
             if change not in seen:
                 print('share UI',name,change,flush=True);seen.add(change)
