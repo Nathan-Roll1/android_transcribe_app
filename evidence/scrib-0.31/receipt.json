@@ -1,0 +1,28 @@
+{
+  "scope": "Model import and activation, witnessed in the regular released Scrib Android app. No transcription result was observed.",
+  "app": {
+    "repository": "https://github.com/23rd/Scrib",
+    "package": "org.scrib.transcriber",
+    "version": "0.31",
+    "version_code": 31,
+    "abi": "x86_64",
+    "android_api": 35,
+    "asset_id": 726497010,
+    "apk_sha256": "7cb1e53c756de2fbad15d3b6d31cd6264a908dce1434328f63494aae1ee3735b"
+  },
+  "model": {
+    "url": "https://huggingface.co/oruk/oruk-fourier-2b/resolve/8bcce21695e4ba13569c48de6cedffcb8a7576f5/Fourier-2B-Q8_0.gguf",
+    "hf_revision": "8bcce21695e4ba13569c48de6cedffcb8a7576f5",
+    "name_shown_active": "Fourier-2B-Q8_0",
+    "language": "English",
+    "license": "CC BY-NC 4.0"
+  },
+  "evidence": {
+    "first_test": "https://github.com/Nathan-Roll1/android_transcribe_app/actions/runs/44996221147",
+    "second_test": "https://github.com/Nathan-Roll1/android_transcribe_app/actions/runs/44997572800",
+    "network_at_file_picker": "airplane mode on; no active default network",
+    "file_picker_outcome": "Android DocumentsUI opened its 11-second media preview for Kennedy.wav instead of returning the file to Scrib. No transcript was measured.",
+    "published_in_app_catalog": false,
+    "command_line_model_import": false
+  }
+}
