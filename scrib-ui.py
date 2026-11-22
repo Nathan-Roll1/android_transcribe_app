@@ -174,12 +174,12 @@ def main():
             copy=find(r,'Copy')
             title=find(r,name,mode='part')
             if close is not None and (copy is not None or save_button is not None) and title is not None:
-                # These short transcripts fit in the dialog. Read from the actual app's
-                # text, independent from the expected answer or relative vertical positions.
-                candidates=[n.get('text','') for n in r.iter('node')
-                            if n.get('package')=='org.scrib.transcriber' and len(n.get('text','').split())>=5]
-                assert candidates,txt
-                actual=max(candidates,key=lambda x:len(x.split()))
+                # The result pane is a ScrollView. Timing and RAM text live outside it.
+                pane = r.find(".//node[@class='android.widget.ScrollView']")
+                assert pane is not None, txt
+                actual = " ".join(n.get("text", "") for n in pane.iter("node")
+                                  if n.get("class") == "android.widget.TextView").strip()
+                assert actual, txt
                 words=re.findall(r'[a-z]+',actual.lower());row=list(range(len(words)+1))
                 for index,w in enumerate(ref,1):
                     prior,row=row,[index]
