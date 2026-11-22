@@ -4,30 +4,21 @@ on:
     branches: [verify/fourier-storage-picker]
 permissions:
   contents: read
+  actions: read
 jobs:
   emulator:
     runs-on: ubuntu-24.04
     timeout-minutes: 38
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
-      - name: Build v0.2.3 F-Droid flavor for the x86_64 emulator
-        shell: bash
-        run: |
-          set -euo pipefail
-          export JAVA_HOME="$JAVA_HOME_17_X64"
-          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
-          sdkmanager "ndk;28.0.13004108" "platforms;android-36"
-          export ANDROID_NDK_HOME="$ANDROID_HOME/ndk/28.0.13004108"
-          rustup target add x86_64-linux-android
-          cargo install --locked cargo-ndk --version 4.1.2
-          ./gradlew --no-daemon --max-workers=3 -PtargetAbis=x86_64 assembleFdroidDebug
-          sha256sum app/build/outputs/apk/fdroid/debug/*.apk
-      - name: Preserve the unmodified app for this emulator ABI
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+      - name: Restore the verified x86_64 F-Droid APK from the previous run
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
         with:
-          name: x86_64-fdroid-debug-verification-apk
-          path: app/build/outputs/apk/fdroid/debug/*.apk
-          retention-days: 7
+          github-token: ${{ github.token }}
+          run-id: 44990850004
+          artifact-ids: 14741861467
+          path: app/build/outputs/apk/fdroid/debug/
+          merge-multiple: true
       - name: Fetch public model and recording on the ephemeral runner
         shell: bash
         run: |

@@ -67,14 +67,31 @@ def tap(node):
     adb("shell","input","tap",str((x1+x2)//2),str((y1+y2)//2))
     time.sleep(0.55)
 
-def wait_for(candidates, seconds=30, allow_scroll=False):
+def scroll_screen(root, upwards=False):
+    areas = []
+    for n in root.iter("node"):
+        if n.get("scrollable")=="true":
+            x1,y1,x2,y2 = map(int,re.findall(r"-?\d+", n.get("bounds","")))
+            if y2-y1 >= 80:
+                areas.append(((x2-x1)*(y2-y1),x1,y1,x2,y2))
+    if not areas: return
+    _,x1,y1,x2,y2=max(areas)
+    x=str((x1+x2)//2)
+    top=str(y1+(y2-y1)*24//100)
+    bottom=str(y1+(y2-y1)*78//100)
+    y_from,y_to=(top,bottom) if upwards else (bottom,top)
+    print("scroll",x,y_from,y_to,flush=True)
+    adb("shell","input","swipe",x,y_from,x,y_to,"520")
+    time.sleep(0.3)
+
+def wait_for(candidates, seconds=40, allow_scroll=False):
     start = time.monotonic()
     deadline = start+seconds
     while time.monotonic()<deadline:
         root = read_screen()
         n = locate(root, candidates)
         if n is not None: return root,n
-        if allow_scroll and time.monotonic()-start>6: adb("shell","input","swipe","500","1750","500","730","280")
+        if allow_scroll and time.monotonic()-start>3: scroll_screen(root)
     snapshot("failed-lookup",root)
     raise RuntimeError("Missing "+str(candidates))
 
@@ -95,13 +112,29 @@ def select_file():
     root = read_screen()
     assert in_files(root), {n.get("package") for n in root.iter("node")}
     snapshot("03-system-picker", root)
+    def drawer():
+        state,nav=wait_for([{"desc":"Show roots"},{"desc":"Show navigation drawer"},{"desc":"Open navigation drawer"},{"desc":"Navigate up"}],seconds=15)
+        tap(nav)
+        return read_screen()
+
+    def pick_from_downloads(state):
+        n=get(state,text=MODEL)
+        if n is not None: return state
+        # Switch to list if DocumentsUI is showing a narrow grid.
+        toggle=locate(state,[{"desc":"List view"},{"desc":"Show list"}])
+        if toggle is not None:
+            tap(toggle);state=read_screen()
+        for _ in range(2):
+            if get(state,text=MODEL) is not None: break
+            if any(x.get("scrollable")=="true" for x in state.iter("node")):
+                scroll_screen(state);state=read_screen()
+        return state
+
     sources = [("Downloads",[{"text":"Downloads"}]),("internal storage",[{"text":shell("getprop","ro.product.model")},{"rid":"root_device"}])]
     visible = [{"text":MODEL}]
     for where, queries in sources:
         if get(root,text=MODEL) is not None: break
-        root, menu = wait_for([{"desc":"Show roots"},{"desc":"Show navigation drawer"},{"desc":"Open navigation drawer"},{"desc":"Navigate up"}],seconds=12)
-        tap(menu)
-        root = read_screen()
+        root = drawer()
         snapshot("04-drawer-"+where.replace(" ","-"),root)
         location=locate(root,queries)
         if location is None and where=="internal storage":
@@ -113,6 +146,7 @@ def select_file():
         if where=="internal storage":
             folder=locate(root,[{"text":"Download"},{"text":"Downloads"}])
             if folder is not None: tap(folder);root=read_screen()
+        root=pick_from_downloads(root)
         snapshot("05-"+where.replace(" ","-"),root)
     root,n=wait_for(visible,seconds=20)
     assert in_files(root)
@@ -122,7 +156,17 @@ def select_file():
     if in_files(root):
         confirm=locate(root,[{"text":"Open"},{"desc":"Open"},{"rid":"button_select"}])
         if confirm is not None: tap(confirm)
-    root,n=wait_for([{"rid":"txt_model_name","text":MODEL}],seconds=200)
+    deadline=time.monotonic()+180
+    while time.monotonic()<deadline:
+        root=read_screen()
+        n=get(root,rid="txt_model_name",text=MODEL)
+        if n is not None: break
+        if not in_files(root):
+            scroll_screen(root,upwards=True)
+        time.sleep(1)
+    else:
+        snapshot("failed-import",root)
+        raise RuntimeError("No imported model in the app list after the picker returned")
     assert n.get("package")==APP
     snapshot("07-imported-model",root)
     tap(n)  # The F-Droid flavor auto-selects the first model, so this can be a no-op.
