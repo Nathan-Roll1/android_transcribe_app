@@ -1,0 +1,40 @@
+name: Check released Scrib Android offline transcription
+on:
+  push:
+    branches: [verify/scrib-fourier-ui-20261122]
+permissions:
+  contents: read
+jobs:
+  stock-apk:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Prepare pinned public APK and public speech sample
+        shell: bash
+        run: |
+          python3 -m venv "$RUNNER_TEMP/ui"
+          "$RUNNER_TEMP/ui/bin/pip" -q install 'uiautomator2==3.5.0'
+          curl -fLsS --retry 3 -H 'Accept: application/octet-stream' https://api.github.com/repos/23rd/Scrib/releases/assets/726497010 -o "$RUNNER_TEMP/scrib.apk"
+          echo "7cb1e53c756de2fbad15d3b6d31cd6264a908dce1434328f63494aae1ee3735b  $RUNNER_TEMP/scrib.apk" | sha256sum -c -
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/ggml-org/whisper.cpp/b0a11594aec50892a02cd8d129eee2dfe93a8bb8/samples/jfk.wav -o "$RUNNER_TEMP/Kennedy.wav"
+          echo "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e  $RUNNER_TEMP/Kennedy.wav" | sha256sum -c -
+          sudo setfacl -m "u:$(id -un):rw" /dev/kvm
+      - name: Exercise app views on a clean x86-64 device
+        uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
+        with:
+          api-level: 35
+          target: google_apis
+          arch: x86_64
+          ram-size: 6144M
+          disk-size: 10240M
+          heap-size: 512M
+          emulator-options: -no-window -no-boot-anim -noaudio -no-metrics -gpu swiftshader_indirect -no-snapshot
+          disable-animations: true
+          script: bash scrib-test.sh
+      - if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: scrib-ui-evidence
+          retention-days: 5
+          path: ${{ runner.temp }}/scrib-evidence
