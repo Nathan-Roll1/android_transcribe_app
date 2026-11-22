@@ -104,46 +104,59 @@ def main():
     assert mode=='1',mode
     network=subprocess.check_output(['adb','shell','dumpsys','connectivity'],text=True)
     (out/'offline.txt').write_text('airplane_mode_on='+mode+'\n'+'\n'.join(x.strip() for x in network.splitlines() if 'Active default network' in x))
-    nav('Transcribe','scrib/tab/file')
-    click(await_item('Transcribe an audio file',mode='part'))
-    time.sleep(2);r=read();save('07-file-picker',r)
-    if find(r,'Kennedy.wav') is None:
-        menu=find(r,'Show roots');menu=menu if menu is not None else find(r,'Open navigation drawer')
-        if menu is not None:click(menu);n=await_item('Downloads');click(n)
-    click(await_item('Kennedy.wav',18,'part'))
-    time.sleep(1);r=read()
-    if any('documentsui' in n.get('package','') for n in r.iter('node')):
-        ok=find(r,'OPEN');ok=ok if ok is not None else find(r,'Select')
-        if ok is not None:click(ok)
-    save('08-file-selected')
-    start=time.monotonic()
-    while time.monotonic()-start<640:
-        r=read()
-        txt=labels(r)
-        finished=find(r,'Close') is not None and (find(r,'Copy') is not None or find(r,'Save .',mode='part') is not None)
-        if finished:
-            # Extract the UI's finished transcript as displayed, independent of its accuracy.
-            text_nodes=[(node.get('text',''),center(node)[1]) for node in r.iter('node') if node.get('text')]
-            filename=await_item('Kennedy.wav',mode='part')
+    fixtures = [('Kennedy.wav','audio/wav',expected),('Scenery.mp3','audio/mpeg',
+          'shakespeare on scenery by oscar wilde this is a librivox recording all librivox recordings are in the public domain'.split())]
+    results = []
+    for name, mime, ref in fixtures:
+        # Android shares a content:// URI and a one-file read grant with the same
+        # ACTION_SEND receiver that the normal audio share sheet opens.
+        collection='content://media/external/audio/media'
+        entries=subprocess.check_output(['adb','shell','content','query','--uri',collection,
+                                          '--projection','_id:_display_name'],text=True)
+        matches=[re.search(r'_id=(\d+)',line).group(1) for line in entries.splitlines()
+                 if line.strip().endswith('_display_name='+name)]
+        assert len(matches)==1, (name,entries[:1200])
+        uri=collection+'/'+matches[0]
+        start=time.monotonic()
+        launched=subprocess.run(['adb','shell','am','start','-W','-a','android.intent.action.SEND',
+            '-t',mime,'--eu','android.intent.extra.STREAM',uri,'--grant-read-uri-permission',
+            '-n','org.scrib.transcriber/.MainActivity'],check=True,text=True,capture_output=True)
+        (out/(name+'-share.txt')).write_text(launched.stdout+launched.stderr)
+        assert 'Exception' not in launched.stdout+launched.stderr,launched.stderr
+        seen=set()
+        while time.monotonic()-start<500:
+            r=read(); txt=labels(r)
+            change=' | '.join(txt)[:900]
+            if change not in seen:
+                print('share UI',name,change,flush=True);seen.add(change)
+            close=find(r,'Close')
+            save_button=find(r,'Save .',mode='part')
             copy=find(r,'Copy')
-            low=center(filename)[1]
-            high=center(copy)[1] if copy is not None else center(find(r,'Close'))[1]
-            between=[v for v,y in text_nodes if low<y<high and len(v.split())>=3]
-            if between:
-                t=max(between,key=lambda v:len(v.split()))
-                words=re.findall('[a-z]+',t.lower())
-                row=list(range(len(words)+1))
-                for i,w in enumerate(expected,1):
-                    prev,row=row,[i]
-                    for j,v in enumerate(words,1):
-                        row.append(min(row[-1]+1,prev[j]+1,prev[j-1]+(v!=w)))
-                save('09-transcript',r)
-                (out/'result.json').write_text(json.dumps({'source':model_url,'fixture':'Kennedy.wav','raw_visible_text':t,'normalized_reference_words':len(expected),'normalized_output_words':len(words),'word_edits':row[-1],'seconds_until_visible':round(time.monotonic()-start,1)},indent=2))
-                return
-        if any('failed' in t.lower() or 'cannot load' in t.lower() for t in txt):
-            raise RuntimeError('app returned error: '+repr(txt))
-        time.sleep(2)
-    raise RuntimeError('no visible transcript: '+repr(labels(read())))
+            title=find(r,name,mode='part')
+            if close is not None and (copy is not None or save_button is not None) and title is not None:
+                # These short transcripts fit in the dialog. Read from the actual app's
+                # text, independent from the expected answer or relative vertical positions.
+                candidates=[n.get('text','') for n in r.iter('node')
+                            if n.get('package')=='org.scrib.transcriber' and len(n.get('text','').split())>=5]
+                assert candidates,txt
+                actual=max(candidates,key=lambda x:len(x.split()))
+                words=re.findall(r'[a-z]+',actual.lower());row=list(range(len(words)+1))
+                for index,w in enumerate(ref,1):
+                    prior,row=row,[index]
+                    for col,v in enumerate(words,1):
+                        row.append(min(row[-1]+1,prior[col]+1,prior[col-1]+(w!=v)))
+                save(name+'-transcript',r)
+                results.append(dict(fixture=name,raw_visible_text=actual,normalized_reference_words=len(ref),
+                                    word_edits=row[-1],wall_seconds=round(time.monotonic()-start,1)))
+                (out/'result.json').write_text(json.dumps({'source':model_url,'entry_point':'Android audio sharing',
+                                    'results':results},indent=2))
+                assert row[-1]<len(ref)*.7,(actual,ref)
+                click(close);break
+            if close is not None and title is not None and copy is None and time.monotonic()-start>12:
+                raise AssertionError('Scrib finished without a transcript: '+change)
+            time.sleep(2)
+        else:
+            raise RuntimeError('No finished transcript for '+name+': '+repr(labels(read())))
 try:main()
 except BaseException:
     save('error');raise

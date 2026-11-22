@@ -12,5 +12,7 @@ adb shell input keyevent 82
 adb shell mkdir -p /sdcard/Download
 adb push "$RUNNER_TEMP/Kennedy.wav" /sdcard/Download/Kennedy.wav
 adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/Kennedy.wav
+adb push "$RUNNER_TEMP/Scenery.mp3" /sdcard/Download/Scenery.mp3
+adb shell am broadcast -a android.intent.action.MEDIA_SCANNER_SCAN_FILE -d file:///sdcard/Download/Scenery.mp3
 adb shell am start -W -n "$app/.MainActivity"
 "$RUNNER_TEMP/ui/bin/python" -u scrib-ui.py "$out"

@@ -19,6 +19,8 @@ jobs:
           echo "7cb1e53c756de2fbad15d3b6d31cd6264a908dce1434328f63494aae1ee3735b  $RUNNER_TEMP/scrib.apk" | sha256sum -c -
           curl -fLsS --retry 3 https://raw.githubusercontent.com/ggml-org/whisper.cpp/b0a11594aec50892a02cd8d129eee2dfe93a8bb8/samples/jfk.wav -o "$RUNNER_TEMP/Kennedy.wav"
           echo "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e  $RUNNER_TEMP/Kennedy.wav" | sha256sum -c -
+          curl -fLsS --retry 3 https://raw.githubusercontent.com/docling-project/docling/0f3564c772e006c73417f61658a2d41c8352224d/tests/data/audio/sources/sample_10s.mp3 -o "$RUNNER_TEMP/Scenery.mp3"
+          echo "7b24ddf710800beddadd02f4f638fb776966a9ce0d40f3e4531aa723df2164c6  $RUNNER_TEMP/Scenery.mp3" | sha256sum -c -
           sudo setfacl -m "u:$(id -un):rw" /dev/kvm
       - name: Exercise app views on a clean x86-64 device
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
