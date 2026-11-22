@@ -76,26 +76,34 @@ def main():
     r=read();assert any(model_url==n.get('text') for n in r.iter('node')),labels(r)
     save('03-entered-url',r)
     click(await_item('Download'))
-    start=time.monotonic(); tick=0; first=True
+    save('04-download-requested')
+    nav('Home','scrib/tab/home')
+    start=time.monotonic(); tick=0
     while time.monotonic()-start<890:
         r=read();txt=labels(r)
-        if first:
-            save('04-downloading',r);first=False
         if int(time.monotonic()-start)//25>tick:
             tick+=1;print('download elapsed',int(time.monotonic()-start),txt[:45],flush=True)
+            if tick%3==0:
+                nav('Settings','scrib/tab/settings')
+                settings=read();save('05-download-progress',settings)
+                if any('download failed' in t.lower() for t in labels(settings)):
+                    raise ValueError('Scrib could not download the model: '+str(labels(settings)))
+                nav('Home','scrib/tab/home')
         if any('failed' in t.lower() or 'invalid link' in t.lower() for t in txt):
             raise ValueError('app reported download failure '+str(txt))
-        use=find(r,'Use')
-        if use is not None and any('fourier' in t.lower() for t in txt):
-            save('05-imported',r);click(use);break
-        if any('fourier' in t.lower() for t in txt) and find(r,'Active') is not None:
+        # The first installed model becomes active automatically on an empty device.
+        if find(r,'Fourier-2B-Q8_0') is not None:
             break
-        if not any('fourier' in t.lower() for t in txt):up()
         time.sleep(1)
     else:raise ValueError('timeout downloading model '+str(labels(read())))
-    nav('Home','scrib/tab/home')
     r=read();save('06-active-home',r)
     assert any('fourier' in t.lower() for t in labels(r)),labels(r)
+    subprocess.run(['adb','shell','cmd','connectivity','airplane-mode','enable'],check=True)
+    time.sleep(4)
+    mode=subprocess.check_output(['adb','shell','settings','get','global','airplane_mode_on'],text=True).strip()
+    assert mode=='1',mode
+    network=subprocess.check_output(['adb','shell','dumpsys','connectivity'],text=True)
+    (out/'offline.txt').write_text('airplane_mode_on='+mode+'\n'+'\n'.join(x.strip() for x in network.splitlines() if 'Active default network' in x))
     nav('Transcribe','scrib/tab/file')
     click(await_item('Transcribe an audio file',mode='part'))
     time.sleep(2);r=read();save('07-file-picker',r)
@@ -112,11 +120,25 @@ def main():
     while time.monotonic()-start<640:
         r=read()
         txt=labels(r)
-        for t in txt:
-            words=re.findall('[a-z]+',t.lower())
-            if any(words[i:i+len(expected)]==expected for i in range(len(words)-len(expected)+1)):
+        finished=find(r,'Close') is not None and (find(r,'Copy') is not None or find(r,'Save .',mode='part') is not None)
+        if finished:
+            # Extract the UI's finished transcript as displayed, independent of its accuracy.
+            text_nodes=[(node.get('text',''),center(node)[1]) for node in r.iter('node') if node.get('text')]
+            filename=await_item('Kennedy.wav',mode='part')
+            copy=find(r,'Copy')
+            low=center(filename)[1]
+            high=center(copy)[1] if copy is not None else center(find(r,'Close'))[1]
+            between=[v for v,y in text_nodes if low<y<high and len(v.split())>=3]
+            if between:
+                t=max(between,key=lambda v:len(v.split()))
+                words=re.findall('[a-z]+',t.lower())
+                row=list(range(len(words)+1))
+                for i,w in enumerate(expected,1):
+                    prev,row=row,[i]
+                    for j,v in enumerate(words,1):
+                        row.append(min(row[-1]+1,prev[j]+1,prev[j-1]+(v!=w)))
                 save('09-transcript',r)
-                (out/'result.json').write_text(json.dumps({'source':model_url,'fixture':'Kennedy.wav','raw_visible_text':t,'normalized_reference_words':len(expected),'seconds_until_visible':round(time.monotonic()-start,1)},indent=2))
+                (out/'result.json').write_text(json.dumps({'source':model_url,'fixture':'Kennedy.wav','raw_visible_text':t,'normalized_reference_words':len(expected),'normalized_output_words':len(words),'word_edits':row[-1],'seconds_until_visible':round(time.monotonic()-start,1)},indent=2))
                 return
         if any('failed' in t.lower() or 'cannot load' in t.lower() for t in txt):
             raise RuntimeError('app returned error: '+repr(txt))
