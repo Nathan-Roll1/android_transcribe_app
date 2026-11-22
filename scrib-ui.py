@@ -49,6 +49,34 @@ def nav(word,tag):
     r=read(); n=find(r,tag);n=n if n is not None else find(r,word,pos='last');click(n)
 def up():
     device.swipe(.51,.81,.51,.34,.35);time.sleep(.55)
+
+def pick_audio(name):
+    """Use Android's multi-file picker. Long-press selects a file without previewing it."""
+    nav('Transcribe','scrib/tab/file')
+    click(await_item('Transcribe an audio file',mode='part'))
+    await_item('Show roots')
+    r=read()
+    if find(r,name) is None:
+        click(find(r,'Show roots'))
+        click(await_item('Downloads'))
+    time.sleep(1)
+    r=read()
+    list_button=find(r,'List view')
+    if list_button is not None:
+        click(list_button)
+    item=await_item(name,15)
+    device.long_click(*center(item),duration=.85)
+    time.sleep(1)
+    r=read()
+    save(name+'-selected',r)
+    for label in ('Open','Select','Choose','Done'):
+        matches=[n for n in r.iter('node') if n.get('text','').lower()==label.lower()
+                 and n.get('enabled')=='true']
+        if matches:
+            click(matches[-1])
+            return
+    raise RuntimeError('No file-selection confirmation in Android: '+repr(labels(r)))
+
 def main():
     time.sleep(2);r=read()
     for label in ('Allow','While using the app','Only this time','Got it','Close'):
@@ -118,13 +146,19 @@ def main():
         assert len(matches)==1, (name,entries[:1200])
         uri=collection+'/'+matches[0]
         start=time.monotonic()
-        launched=subprocess.run(['adb','shell','am','start','-W','-a','android.intent.action.SEND',
-            '-t',mime,'--eu','android.intent.extra.STREAM',uri,'--grant-read-uri-permission',
-            '-n','org.scrib.transcriber/.MainActivity'],check=True,text=True,capture_output=True)
-        (out/(name+'-share.txt')).write_text(launched.stdout+launched.stderr)
-        assert 'Exception' not in launched.stdout+launched.stderr,launched.stderr
+        entry='Android file picker'
+        try:
+            pick_audio(name)
+        except (AssertionError, RuntimeError, ValueError) as exc:
+            print('Picker fallback:', str(exc), flush=True)
+            entry='Android shared audio (cold launch)'
+            launched=subprocess.run(['adb','shell','am','start','-S','-W','-a','android.intent.action.SEND',
+                '-t',mime,'--eu','android.intent.extra.STREAM',uri,'--grant-read-uri-permission',
+                '-n','org.scrib.transcriber/.MainActivity'],check=True,text=True,capture_output=True)
+            (out/(name+'-share.txt')).write_text(launched.stdout+launched.stderr)
+            assert 'Exception' not in launched.stdout+launched.stderr,launched.stderr
         seen=set()
-        while time.monotonic()-start<500:
+        while time.monotonic()-start<300:
             r=read(); txt=labels(r)
             change=' | '.join(txt)[:900]
             if change not in seen:
@@ -146,9 +180,9 @@ def main():
                     for col,v in enumerate(words,1):
                         row.append(min(row[-1]+1,prior[col]+1,prior[col-1]+(w!=v)))
                 save(name+'-transcript',r)
-                results.append(dict(fixture=name,raw_visible_text=actual,normalized_reference_words=len(ref),
+                results.append(dict(fixture=name,entry_point=entry,raw_visible_text=actual,normalized_reference_words=len(ref),
                                     word_edits=row[-1],wall_seconds=round(time.monotonic()-start,1)))
-                (out/'result.json').write_text(json.dumps({'source':model_url,'entry_point':'Android audio sharing',
+                (out/'result.json').write_text(json.dumps({'source':model_url,'apk_version':'0.31',
                                     'results':results},indent=2))
                 assert row[-1]<len(ref)*.7,(actual,ref)
                 click(close);break
