@@ -51,7 +51,7 @@ def up():
     device.swipe(.51,.81,.51,.34,.35);time.sleep(.55)
 def main():
     time.sleep(2);r=read()
-    for label in ('Allow','While using the app','Only this time','Got it'):
+    for label in ('Allow','While using the app','Only this time','Got it','Close'):
         n=find(r,label)
         if n is not None:click(n);r=read()
     save('01-home')
