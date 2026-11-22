@@ -1,7 +1,7 @@
-name: Verify Fourier in the Android file activity
+name: Verify Fourier import through the Android system picker
 on:
   push:
-    branches: [verify/fourier-file-activity]
+    branches: [verify/fourier-storage-picker]
 permissions:
   contents: read
 jobs:
@@ -39,8 +39,17 @@ jobs:
           arch: x86_64
           target: google_apis
           ram-size: 6144M
-          disk-size: 6144M
+          disk-size: 10240M
           heap-size: 512M
           emulator-options: -no-window -no-boot-anim -noaudio -no-metrics -gpu swiftshader_indirect -no-snapshot
           disable-animations: true
-          script: bash verification/test-file-activity.sh
+          script: bash verification/test-storage-picker.sh
+
+      - name: Save Android picker, import and transcript evidence
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: android-storage-picker-evidence
+          path: ${{ runner.temp }}/picker-evidence/
+          if-no-files-found: warn
+          retention-days: 14
